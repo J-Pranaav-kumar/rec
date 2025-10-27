@@ -1,0 +1,282 @@
+🧠 BACKEND (Node + Express + MongoDB)
+📁 index.js
+const express = require("express");
+const mongoose = require("mongoose");
+const cors = require("cors");
+const blogRouter = require("./routes/blogRouter");
+
+const app = express();
+
+app.use(cors());
+app.use(express.json());
+
+// Mongo connection
+mongoose
+  .connect("mongodb://localhost:27017/blogspace", {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+  })
+  .then(() => console.log("MongoDB connected"))
+  .catch((err) => console.error("MongoDB connection error:", err));
+
+app.use("/api/blogs", blogRouter);
+
+// 404 handler
+app.use((req, res) => res.status(404).json({ message: "Route not found" }));
+
+const PORT = 8080;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
+📁 models/blogModel.js
+const mongoose = require("mongoose");
+
+const blogSchema = new mongoose.Schema(
+  {
+    title: {
+      type: String,
+      required: [true, "Title is required"],
+    },
+    content: {
+      type: String,
+      required: [true, "Content is required"],
+    },
+    author: {
+      type: String,
+      default: "Anonymous",
+    },
+  },
+  { timestamps: true }
+);
+
+module.exports = mongoose.model("Blog", blogSchema);
+
+📁 controllers/blogController.js
+const Blog = require("../models/blogModel");
+
+exports.createBlog = async (req, res) => {
+  try {
+    const { title, content, author } = req.body;
+
+    if (!title || !content) {
+      return res.status(400).json({ message: "Title and content are required" });
+    }
+
+    const newBlog = await Blog.create({
+      title,
+      content,
+      author: author || "Anonymous",
+    });
+
+    return res
+      .status(201)
+      .json({ message: "Blog created successfully", blog: newBlog });
+  } catch (error) {
+    return res.status(500).json({ message: "Error creating blog", error: error.message });
+  }
+};
+
+exports.getBlogs = async (req, res) => {
+  try {
+    const blogs = await Blog.find().sort({ createdAt: -1 });
+    return res.status(200).json({
+      message: "Blogs retrieved successfully",
+      blogs,
+      count: blogs.length,
+    });
+  } catch (error) {
+    return res.status(500).json({ message: "Error retrieving blogs", error: error.message });
+  }
+};
+
+📁 routes/blogRouter.js
+const express = require("express");
+const router = express.Router();
+const blogController = require("../controllers/blogController");
+
+router.post("/", blogController.createBlog);
+router.get("/", blogController.getBlogs);
+
+module.exports = router;
+
+🎨 FRONTEND (React + Axios + Bootstrap + Router)
+📁 src/apiConfig.js
+export const API_URL = "http://localhost:8080/api/blogs";
+
+📁 src/App.js
+import React from "react";
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import Home from "./Components/Home";
+import AddBlog from "./Components/AddBlog";
+import ViewBlogs from "./Components/ViewBlogs";
+import "bootstrap/dist/css/bootstrap.min.css";
+
+function App() {
+  return (
+    <Router>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/add" element={<AddBlog />} />
+        <Route path="/view" element={<ViewBlogs />} />
+      </Routes>
+    </Router>
+  );
+}
+
+export default App;
+
+📁 src/Components/Home.jsx
+import React from "react";
+import { Link } from "react-router-dom";
+import "bootstrap/dist/css/bootstrap.min.css";
+import "./Home.css";
+
+function Home() {
+  return (
+    <div className="container text-center mt-5">
+      <h1>BlogSpace Management System</h1>
+      <div className="mt-4">
+        <Link to="/add" className="btn btn-primary m-2">
+          Add Blog
+        </Link>
+        <Link to="/view" className="btn btn-secondary m-2">
+          View Blogs
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+export default Home;
+
+📁 src/Components/AddBlog.jsx
+import React, { useState } from "react";
+import axios from "axios";
+import { useNavigate } from "react-router-dom";
+import { API_URL } from "../apiConfig";
+import "bootstrap/dist/css/bootstrap.min.css";
+import "./AddBlog.css";
+
+function AddBlog() {
+  const [title, setTitle] = useState("");
+  const [content, setContent] = useState("");
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const navigate = useNavigate();
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+    setSuccess("");
+
+    if (!title.trim() || !content.trim()) {
+      setError("Title and content are required");
+      return;
+    }
+
+    try {
+      const res = await axios.post(API_URL, { title, content });
+      if (res.status === 201) {
+        setSuccess("Blog created successfully");
+        setTimeout(() => navigate("/view"), 800);
+      }
+    } catch {
+      setError("Failed to create blog");
+    }
+  };
+
+  return (
+    <div className="container mt-5">
+      <h2>Create New Blog Post</h2>
+      <form onSubmit={handleSubmit} className="mt-3">
+        <div className="form-group mb-3">
+          <label htmlFor="title">Blog Title</label>
+          <input
+            id="title"
+            type="text"
+            className="form-control"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            required
+          />
+        </div>
+        <div className="form-group mb-3">
+          <label htmlFor="content">Blog Content</label>
+          <textarea
+            id="content"
+            className="form-control"
+            rows="5"
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            required
+          ></textarea>
+        </div>
+        <button type="submit" className="btn btn-success">
+          Publish Blog
+        </button>
+      </form>
+
+      {error && <p className="text-danger mt-3">{error}</p>}
+      {success && <p className="text-success mt-3">{success}</p>}
+    </div>
+  );
+}
+
+export default AddBlog;
+
+📁 src/Components/ViewBlogs.jsx
+import React from "react";
+import axios from "axios";
+import { API_URL } from "../apiConfig";
+import "bootstrap/dist/css/bootstrap.min.css";
+import "./ViewBlogs.css";
+
+class ViewBlogs extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = {
+      blogs: [],
+      loading: true,
+      error: "",
+    };
+  }
+
+  async componentDidMount() {
+    try {
+      const res = await axios.get(API_URL);
+      this.setState({
+        blogs: res.data.blogs || [],
+        loading: false,
+        error: "",
+      });
+    } catch {
+      this.setState({ loading: false, error: "Unable to load blogs" });
+    }
+  }
+
+  render() {
+    const { blogs, loading, error } = this.state;
+
+    if (loading) return <p>Loading blogs...</p>;
+    if (error) return <p className="text-danger">{error}</p>;
+    if (blogs.length === 0) return <p>No blogs available yet</p>;
+
+    return (
+      <div className="container mt-4">
+        <h2>All Blog Posts</h2>
+        <div className="row mt-4">
+          {blogs.map((b) => (
+            <div key={b._id} className="col-md-6 mb-3">
+              <div className="card p-3 shadow-sm">
+                <h4>{b.title}</h4>
+                <p className="text-muted">By {b.author}</p>
+                <p>{b.content}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+}
+
+export default ViewBlogs;
